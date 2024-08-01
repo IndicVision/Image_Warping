@@ -3,10 +3,11 @@ import numpy as np
 from rembg import remove
 from PIL import Image
 import napari
-from qtpy.QtWidgets import QPushButton
+from qtpy.QtWidgets import QPushButton, QLabel
 import scipy.spatial
 import math
 import sys
+import os
 
 def order_points(pts):
     rect = np.zeros((4, 2), dtype="float32")
@@ -20,7 +21,7 @@ def order_points(pts):
 
     return rect
 
-def main(input_image_path, output_image_path):
+def process_image(input_image_path, output_image_path):
     # Load image
     image = Image.open(input_image_path)
     image_np = np.array(image)
@@ -52,10 +53,13 @@ def main(input_image_path, output_image_path):
             break
 
     # Initial points from detected contour
-    points = [tuple(pt[0]) for pt in screenCnt]
-
-    # Convert points to numpy array and correct coordinate system (cv2 to napari)
-    points_array = np.array(points)[:, [1, 0]]  # Convert (x, y) to (y, x)
+    if screenCnt is not None:
+        points = [tuple(pt[0]) for pt in screenCnt]
+        points_array = np.array(points)[:, [1, 0]]  # Convert (x, y) to (y, x)
+        prompt_message = "4-point contour detected automatically."
+    else:
+        points_array = np.array([])  # Empty array to prompt user input
+        prompt_message = "No points detected. Please select exactly 4 points."
 
     # Function to store points and perform perspective transform
     def store_and_transform():
@@ -145,17 +149,31 @@ def main(input_image_path, output_image_path):
         viewer.add_image(image_np, name='Original Image')
         points_layer = viewer.add_points(points_array, size=50, face_color='red', name='Edge Points', symbol='disc')
 
+        # Add a label to display the prompt message
+        label = QLabel(prompt_message)
+        viewer.window.add_dock_widget(label, area='right')
+
         # Add a button to store points and close viewer
         store_button = QPushButton('Store Points and Transform')
         store_button.clicked.connect(store_and_transform)
         viewer.window.add_dock_widget(store_button, area='right')
 
+def main(input_folder, output_folder):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    for filename in os.listdir(input_folder):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            input_image_path = os.path.join(input_folder, filename)
+            output_image_path = os.path.join(output_folder, filename)
+            process_image(input_image_path, output_image_path)
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: python script.py <input_image_path> <output_image_path>")
+        print("Usage: python script.py <input_folder> <output_folder>")
         sys.exit(1)
     
-    input_image_path = sys.argv[1]
-    output_image_path = sys.argv[2]
+    input_folder = sys.argv[1]
+    output_folder = sys.argv[2]
 
-    main(input_image_path, output_image_path)
+    main(input_folder, output_folder)
